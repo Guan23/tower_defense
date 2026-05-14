@@ -17,7 +17,9 @@ info:
 from abc import ABC, abstractmethod
 import pygame
 from settings import *
-from utils import load_image
+from tools import load_image
+from utils.sound_manager import shoot_snd
+
 
 class Gun(ABC):
     def __init__(self):
@@ -32,6 +34,7 @@ class Gun(ABC):
     def shoot(self, px, py):
         pass
 
+
 class NormalGun(Gun):
     def __init__(self):
         super().__init__()
@@ -43,8 +46,11 @@ class NormalGun(Gun):
         now = pygame.time.get_ticks()
         if now - self.last_shot > self.fire_rate:
             self.last_shot = now
-            bullet_rect = pygame.Rect(px-5, py-20, 10, 10)
+            bullet_rect = pygame.Rect(px - 5, py - 20, 10, 10)
             self.bullets.append({"rect": bullet_rect, "dmg": self.damage, "speed": self.bullet_speed, "laser": False})
+            if shoot_snd:
+                shoot_snd.play()
+
 
 class LaserGun(Gun):
     def __init__(self):
@@ -57,11 +63,10 @@ class LaserGun(Gun):
         now = pygame.time.get_ticks()
         if now - self.last_shot > self.fire_rate:
             self.last_shot = now
-            bullet_rect = pygame.Rect(px-5, py-20, 10, 10)
+            bullet_rect = pygame.Rect(px - 5, py - 20, 10, 10)
             self.bullets.append({"rect": bullet_rect, "dmg": self.damage, "speed": self.bullet_speed, "laser": True})
-
-
-
+            if shoot_snd:
+                shoot_snd.play()
 
 
 if __name__ == "__main__":

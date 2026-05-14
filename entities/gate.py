@@ -16,7 +16,7 @@ info:
 from abc import ABC, abstractmethod
 import pygame
 from settings import *
-from utils import load_image
+from tools import load_image
 
 class Gate(ABC):
     def __init__(self):
