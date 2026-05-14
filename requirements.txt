@@ -1,0 +1,6 @@
+numpy
+pandas
+matplotlib
+pygame
+pyqt5
+opencv-python
