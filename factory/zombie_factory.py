@@ -13,11 +13,11 @@ info:
 # third_party
 
 # custom
-
 from factory.game_factory import GameFactory
 from entities.monster import NormalMonster, EliteMonster, BossMonster
 from entities.gun import NormalGun, LaserGun
-from entities.skill import FireSkill, ThunderSkill
+from entities.skill import FireSkill, ThunderSkill, IceSkill
+from entities.tower import NormalTower, IceTower, FireTower
 import random
 
 
@@ -43,6 +43,16 @@ class ZombieGameFactory(GameFactory):
             return FireSkill()
         elif name == "thunder":
             return ThunderSkill()
+        elif name == "ice":
+            return IceSkill()
+
+    def create_tower(self, type_name, x, y, cell_idx):
+        if type_name == "normal":
+            return NormalTower(x, y, cell_idx)
+        elif type_name == "ice":
+            return IceTower(x, y, cell_idx)
+        elif type_name == "fire":
+            return FireTower(x, y, cell_idx)
 
 
 if __name__ == "__main__":

@@ -13,19 +13,20 @@ info:
 # third_party
 
 # custom
-
 from abc import ABC, abstractmethod
 import pygame
 from settings import *
 from tools import load_image
+
 
 class Player(ABC):
     def __init__(self):
         self.hp = 0
         self.max_hp = 0
         self.damage = 0
-        self.x = W//2
-        self.y = H - 80  # 玩家在门后面
+        # 固定在7等分中间那一格的中心
+        self.x = CELL_START_X + MIDDLE_CELL_IDX * CELL_W + CELL_W // 2
+        self.y = H - 80
         self.size = 40
         self.color = BLUE
         self.gold = 100
@@ -37,9 +38,10 @@ class Player(ABC):
 
     def draw(self, screen):
         if self.img:
-            screen.blit(self.img, (self.x - self.size//2, self.y - self.size//2))
+            screen.blit(self.img, (self.x - self.size // 2, self.y - self.size // 2))
         else:
-            pygame.draw.circle(screen, self.color, (self.x, self.y), self.size//2)
+            pygame.draw.circle(screen, self.color, (self.x, self.y), self.size // 2)
+
 
 class NormalPlayer(Player):
     def __init__(self):
@@ -49,7 +51,6 @@ class NormalPlayer(Player):
 
     def get_info(self):
         return "普通主角"
-
 
 
 if __name__ == "__main__":

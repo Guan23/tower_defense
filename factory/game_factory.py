@@ -13,8 +13,8 @@ info:
 # third_party
 
 # custom
-
 from abc import ABC, abstractmethod
+
 
 class GameFactory(ABC):
     @abstractmethod
@@ -27,6 +27,10 @@ class GameFactory(ABC):
 
     @abstractmethod
     def create_skill(self, name):
+        pass
+
+    @abstractmethod
+    def create_tower(self, type_name, x, y, cell_idx):
         pass
 
 

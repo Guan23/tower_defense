@@ -41,6 +41,11 @@ class Skill(ABC):
         text = font.render(f"{remaining // 1000}s", True, WHITE)
         screen.blit(text, (center_x - 15, center_y - self.range - 20))
 
+    def upgrade(self):
+        self.damage = int(self.damage * 1.35)
+        self.range += 25
+        self.cd = int(self.cd * 0.85)
+
 
 class FireSkill(Skill):
     def __init__(self):
@@ -64,6 +69,11 @@ class FireSkill(Skill):
             if hit and fire_hit_snd:
                 fire_hit_snd.play()
 
+    def upgrade(self):
+        self.damage = int(self.damage * 1.35)
+        self.range += 25
+        self.cd = int(self.cd * 0.85)
+
 
 class ThunderSkill(Skill):
     def __init__(self):
@@ -86,6 +96,11 @@ class ThunderSkill(Skill):
                     hit = True
             if hit and thunder_hit_snd:
                 thunder_hit_snd.play()
+
+    def upgrade(self):
+        self.damage = int(self.damage * 1.35)
+        self.range += 25
+        self.cd = int(self.cd * 0.85)
 
 
 # 新增冰系技能
