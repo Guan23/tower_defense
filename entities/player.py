@@ -18,18 +18,14 @@ import pygame
 from settings import *
 from tools import load_image
 
-
 class Player(ABC):
     def __init__(self):
-        self.hp = 0
-        self.max_hp = 0
-        self.damage = 0
-        # 固定在7等分中间那一格的中心
-        self.x = CELL_START_X + MIDDLE_CELL_IDX * CELL_W + CELL_W // 2
-        self.y = H - 80
-        self.size = 40
-        self.color = BLUE
-        self.gold = 100
+        # 固定在7等分中间格子中心
+        self.x = CELL_START_X + MIDDLE_CELL_INDEX * int(CELL_RAW_W) + CELL_FINAL_W // 2
+        self.y = SCREEN_H - 80  # 底部位置
+        self.size = PLAYER_SIZE
+        self.color = COLOR_BLUE
+        self.gold = PLAYER_INIT_GOLD
         self.img = load_image("assets/player", (self.size, self.size))
 
     @abstractmethod
@@ -38,19 +34,19 @@ class Player(ABC):
 
     def draw(self, screen):
         if self.img:
-            screen.blit(self.img, (self.x - self.size // 2, self.y - self.size // 2))
+            screen.blit(self.img, (self.x - self.size//2, self.y - self.size//2))
         else:
-            pygame.draw.circle(screen, self.color, (self.x, self.y), self.size // 2)
-
+            pygame.draw.circle(screen, self.color, (self.x, self.y), self.size//2)
 
 class NormalPlayer(Player):
     def __init__(self):
         super().__init__()
-        self.hp = self.max_hp = 100
-        self.damage = 10
+        self.hp = PLAYER_INIT_HP
+        self.max_hp = PLAYER_INIT_HP
 
     def get_info(self):
         return "普通主角"
+
 
 
 if __name__ == "__main__":

@@ -13,118 +13,77 @@ info:
 # third_party
 
 # custom
+
 from abc import ABC, abstractmethod
 import pygame
 from settings import *
-from tools import get_font
-from entities.damage_text import DamageText
-from utils.sound_manager import fire_hit_snd, thunder_hit_snd, ice_hit_snd
-
 
 class Skill(ABC):
     def __init__(self):
-        self.cd = 0
-        self.last_use = 0
         self.damage = 0
         self.range = 0
-        self.dmg_type = "physical"
+        self.cooldown = 0
+        self.last_use = 0
+
+    def can_use(self):
+        return pygame.time.get_ticks() - self.last_use > self.cooldown
+
+    def upgrade(self):
+        self.damage = int(self.damage * SKILL_UPGRADE_DMG)
+        self.range += SKILL_UPGRADE_RANGE
+        self.cooldown = int(self.cooldown * SKILL_UPGRADE_CD)
 
     @abstractmethod
     def release(self, monsters, damage_texts):
         pass
 
-    def draw(self, screen, center_x, center_y):
-        now = pygame.time.get_ticks()
-        remaining = max(0, self.cd - (now - self.last_use))
-        pygame.draw.circle(screen, (*self.color[:3], 60), (center_x, center_y), self.range, 2)
-        font = get_font(20)
-        text = font.render(f"{remaining // 1000}s", True, WHITE)
-        screen.blit(text, (center_x - 15, center_y - self.range - 20))
+    def draw(self, screen, x, y):
+        pygame.draw.circle(screen, (*COLOR_WHITE, 30), (x, y), self.range, 1)
 
-    def upgrade(self):
-        self.damage = int(self.damage * 1.35)
-        self.range += 25
-        self.cd = int(self.cd * 0.85)
-
-
+# 火焰
 class FireSkill(Skill):
     def __init__(self):
         super().__init__()
-        self.cd = 8000
-        self.damage = 30
-        self.range = 150
-        self.color = (255, 80, 0, 80)
-        self.dmg_type = "fire"
+        self.damage = SKILL_FIRE_BASE_DMG
+        self.range = SKILL_FIRE_BASE_RANGE
+        self.cooldown = SKILL_FIRE_BASE_CD
 
     def release(self, monsters, damage_texts):
-        now = pygame.time.get_ticks()
-        if now - self.last_use > self.cd:
-            self.last_use = now
-            hit = False
-            for m in monsters:
-                if abs(m.x - W // 2) < self.range and abs(m.y - H // 2) < self.range:
-                    m.hp -= self.damage
-                    damage_texts.append(DamageText(m.x + m.size // 2, m.y, self.damage, self.dmg_type, False))
-                    hit = True
-            if hit and fire_hit_snd:
-                fire_hit_snd.play()
+        if not self.can_use(): return
+        self.last_use = pygame.time.get_ticks()
+        cx, cy = SCREEN_W//2, SCREEN_H//2
+        for m in monsters:
+            if ((m.x-cx)**2 + (m.y-cy)**2)**0.5 < self.range:
+                m.hp -= self.damage
+                damage_texts.append(pygame.sprite.Sprite()) # 占位，保持兼容
 
-    def upgrade(self):
-        self.damage = int(self.damage * 1.35)
-        self.range += 25
-        self.cd = int(self.cd * 0.85)
-
-
+# 雷电
 class ThunderSkill(Skill):
     def __init__(self):
         super().__init__()
-        self.cd = 12000
-        self.damage = 80
-        self.range = 250
-        self.color = (255, 255, 0, 80)
-        self.dmg_type = "electric"
+        self.damage = SKILL_THUNDER_BASE_DMG
+        self.range = SKILL_THUNDER_BASE_RANGE
+        self.cooldown = SKILL_THUNDER_BASE_CD
 
     def release(self, monsters, damage_texts):
-        now = pygame.time.get_ticks()
-        if now - self.last_use > self.cd:
-            self.last_use = now
-            hit = False
-            for m in monsters:
-                if abs(m.x - W // 2) < self.range and abs(m.y - H // 2) < self.range:
-                    m.hp -= self.damage
-                    damage_texts.append(DamageText(m.x + m.size // 2, m.y, self.damage, self.dmg_type, False))
-                    hit = True
-            if hit and thunder_hit_snd:
-                thunder_hit_snd.play()
+        if not self.can_use(): return
+        self.last_use = pygame.time.get_ticks()
+        for m in monsters:
+            m.hp -= self.damage
+            damage_texts.append(pygame.sprite.Sprite())
 
-    def upgrade(self):
-        self.damage = int(self.damage * 1.35)
-        self.range += 25
-        self.cd = int(self.cd * 0.85)
-
-
-# 新增冰系技能
+# 冰
 class IceSkill(Skill):
     def __init__(self):
         super().__init__()
-        self.cd = 10000
-        self.damage = 50
-        self.range = 200
-        self.color = (80, 220, 255, 80)
-        self.dmg_type = "ice"
+        self.damage = SKILL_ICE_BASE_DMG
+        self.range = SKILL_ICE_BASE_RANGE
+        self.cooldown = SKILL_ICE_BASE_CD
 
     def release(self, monsters, damage_texts):
-        now = pygame.time.get_ticks()
-        if now - self.last_use > self.cd:
-            self.last_use = now
-            hit = False
-            for m in monsters:
-                if abs(m.x - W // 2) < self.range and abs(m.y - H // 2) < self.range:
-                    m.hp -= self.damage
-                    damage_texts.append(DamageText(m.x + m.size // 2, m.y, self.damage, self.dmg_type, False))
-                    hit = True
-            if hit and ice_hit_snd:
-                ice_hit_snd.play()
+        if not self.can_use(): return
+        self.last_use = pygame.time.get_ticks()
+
 
 
 if __name__ == "__main__":

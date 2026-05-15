@@ -9,24 +9,13 @@ info:
 """
 
 # system
-import os
-import random
+
 
 # third_party
-import pygame
+
 
 # custom
-import pygame
-import random
-from settings import *
-from factory.zombie_factory import ZombieGameFactory
-from entities.player import NormalPlayer
-from entities.gate import HomeGate
-from entities.damage_text import DamageText
-from entities.skill import FireSkill, ThunderSkill, IceSkill
-from entities.tower import NormalTower, IceTower, FireTower
-from tools import load_image, get_font
-from utils.sound_manager import bullet_hit_snd, gate_hit_snd, play_bgm
+
 
 if __name__ == "__main__":
     print("\n---------------- start ----------------\n")
@@ -39,296 +28,401 @@ if __name__ == "__main__":
     from entities.gate import HomeGate
     from entities.damage_text import DamageText
     from entities.skill import FireSkill, ThunderSkill, IceSkill
-    from entities.tower import NormalTower, IceTower, FireTower
+    from entities.tower import NormalTower, IceTower, FireTower, ElectricTower
     from tools import load_image, get_font
     from utils.sound_manager import bullet_hit_snd, gate_hit_snd, play_bgm
 
-    # 初始化pygame
+    # 初始化
     pygame.init()
-    screen = pygame.display.set_mode((W, H))
+    screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
     clock = pygame.time.Clock()
-
-    # 播放背景音乐
     play_bgm()
-    # 加载子弹图片
-    bullet_img = load_image("assets/bullet", (10, 10))
 
-    # 创建工厂、玩家、大门、枪支、三大技能
+    # 加载图片
+    bullet_img = load_image("assets/bullet", (BULLET_SIZE_W, BULLET_SIZE_H))
+    btn_upgrade = load_image("assets/btn_upgrade", (TOWER_UI_BTN_SIZE, TOWER_UI_BTN_SIZE))
+    btn_sell = load_image("assets/btn_sell", (TOWER_UI_BTN_SIZE, TOWER_UI_BTN_SIZE))
+    btn_cancel = load_image("assets/btn_cancel", (TOWER_UI_BTN_SIZE, TOWER_UI_BTN_SIZE))
+
+    # 炮塔建造列表（含电塔）
+    TOWER_SELECT_DATA = [
+        {"type": "normal", "cost": TOWER_COST_NORMAL, "color": (100, 100, 100), "name": "普通"},
+        {"type": "ice", "cost": TOWER_COST_ICE, "color": COLOR_ICE_BLUE, "name": "冰塔"},
+        {"type": "fire", "cost": TOWER_COST_FIRE, "color": (255, 80, 0), "name": "火塔"},
+        {"type": "electric", "cost": TOWER_COST_ELEC, "color": COLOR_ELEC, "name": "电塔"},
+    ]
+
+    # 游戏核心
     factory = ZombieGameFactory()
     player = NormalPlayer()
     gate = HomeGate()
     gun = factory.create_gun("normal")
-    fire = FireSkill()
-    thunder = ThunderSkill()
-    ice = IceSkill()
+    fire_skill = FireSkill()
+    thunder_skill = ThunderSkill()
+    ice_skill = IceSkill()
 
-    # 游戏对象容器
-    monsters = []  # 怪物列表
-    towers = []  # 炮塔列表
-    wave = 1  # 当前波次
-    spawn_timer = 0  # 刷怪计时器
-    damage_texts = []  # 伤害飘字列表
+    monsters = []
+    towers = []
+    wave = 1
+    spawn_timer = 0
+    damage_texts = []
 
-    # -------------------------- 建造格子配置 --------------------------
-    cell_occupied = [False] * CELL_TOTAL  # 7个格子占用状态 0~6
-    buildable_cell = [0, 1, 2, 4, 5, 6]  # 可建造格子：左3 右3，中间3号不可建造
-    BUILD_COST = {"normal": 40, "ice": 80, "fire": 100}  # 炮塔建造金币
+    cell_occupied = [False] * CELL_TOTAL
+    buildable_cells = [0, 1, 2, 4, 5, 6]
 
-    # 升级花费
-    UPGRADE_COST_GUN = 60
-    UPGRADE_COST_SKILL = 100
-    gun_level = 1
-    fire_lv = 1
-    thunder_lv = 1
-    ice_lv = 1
+    # UI状态
+    show_tower_buy = False
+    selected_cell = -1
+    show_tower_menu = False
+    selected_tower = None
+    show_gun_menu = False
+    tip_text = ""
+    tip_time = 0
 
-    build_mode = None  # 建造模式: None / normal / ice / fire
-    selected_tower = None  # 当前选中的炮塔，用于升级/摧毁
-
-    # 游戏主循环
+    # 主循环
     running = True
     while running:
-        screen.fill(GRAY)
+        screen.fill(COLOR_GRAY)
         now = pygame.time.get_ticks()
         clock.tick(FPS)
 
-        # -------------------------- 绘制7个建造格子 --------------------------
+        # 绘制建造格子
+        cell_rects = []
         for i in range(CELL_TOTAL):
-            cx = CELL_START_X + i * CELL_W
-            cy = GATE_Y + gate.h + 10
-            rect = pygame.Rect(cx, cy, CELL_W - 2, 50)
-            # 中间格子为人物位置，不可建造，深灰色
-            if i == MIDDLE_CELL_IDX:
-                pygame.draw.rect(screen, (40, 40, 40), rect, 2)
+            x = CELL_START_X + i * int(CELL_RAW_W)
+            y = GATE_Y + gate.h + 10
+            r = pygame.Rect(x, y, CELL_FINAL_W, CELL_H)
+            cell_rects.append(r)
+            if i == MIDDLE_CELL_INDEX:
+                pygame.draw.rect(screen, (60, 80, 100), r, 2)
+                font = get_font(22)
+                screen.blit(font.render(f"Lv{gun.level}", True, COLOR_WHITE), (x + 8, y + 6))
+                if gun.level < MAX_GUN_LEVEL and player.gold >= gun.upgrade_cost():
+                    screen.blit(get_font(20).render("↑", True, COLOR_GREEN), (x + CELL_FINAL_W - 20, y - 15))
             else:
-                # 已建造/未建造区分颜色
-                color = (60, 60, 60) if cell_occupied[i] else (90, 90, 90)
-                pygame.draw.rect(screen, color, rect, 2)
+                c = (60, 60, 60) if cell_occupied[i] else (90, 90, 90)
+                pygame.draw.rect(screen, c, r, 2)
+                if not cell_occupied[i]:
+                    screen.blit(get_font(24).render("+", True, COLOR_WHITE),
+                                (x + CELL_FINAL_W // 2 - 8, y + 8))
 
-        # -------------------------- 事件处理：按键+鼠标 --------------------------
-        for event in pygame.event.get():
-            # 退出游戏
-            if event.type == pygame.QUIT:
+        # 事件
+        for e in pygame.event.get():
+            if e.type == pygame.QUIT:
                 running = False
 
-            # 键盘按下事件
-            if event.type == pygame.KEYDOWN:
-                # 释放技能
-                if event.key == pygame.K_SPACE:
-                    fire.release(monsters, damage_texts)
-                if event.key == pygame.K_t:
-                    thunder.release(monsters, damage_texts)
-                if event.key == pygame.K_c:
-                    ice.release(monsters, damage_texts)
+            if e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
+                mx, my = e.pos
+                hit = False
 
-                # 切换建造模式
-                if event.key == pygame.K_1:
-                    build_mode = "normal"
-                if event.key == pygame.K_2:
-                    build_mode = "ice"
-                if event.key == pygame.K_3:
-                    build_mode = "fire"
-                if event.key == pygame.K_0:
-                    build_mode = None
-                    selected_tower = None
-
-                # 升级玩家枪支
-                if event.key == pygame.K_q and player.gold >= UPGRADE_COST_GUN:
-                    player.gold -= UPGRADE_COST_GUN
-                    gun_level += 1
-                    gun.damage = int(gun.damage * 1.3)
-                    gun.fire_rate = int(gun.fire_rate * 0.85)
-
-                # 升级三大技能
-                if event.key == pygame.K_f and player.gold >= UPGRADE_COST_SKILL:
-                    player.gold -= UPGRADE_COST_SKILL
-                    fire.upgrade()
-                    fire_lv += 1
-                if event.key == pygame.K_r and player.gold >= UPGRADE_COST_SKILL:
-                    player.gold -= UPGRADE_COST_SKILL
-                    thunder.upgrade()
-                    thunder_lv += 1
-                if event.key == pygame.K_v and player.gold >= UPGRADE_COST_SKILL:
-                    player.gold -= UPGRADE_COST_SKILL
-                    ice.upgrade()
-                    ice_lv += 1
-
-                # U：升级选中的炮塔
-                if event.key == pygame.K_u and selected_tower:
-                    cost = selected_tower.upgrade_cost()
-                    if player.gold >= cost:
-                        player.gold -= cost
-                        selected_tower.upgrade()
-
-                # D：摧毁选中的炮塔，返还80%总花费
-                if event.key == pygame.K_d and selected_tower:
-                    refund = int(selected_tower.total_cost * 0.8)
-                    player.gold += refund
-                    cell_occupied[selected_tower.cell_idx] = False
-                    towers.remove(selected_tower)
-                    selected_tower = None
-
-            # 鼠标点击：建造炮塔 / 选中炮塔
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                mx, my = event.pos
-                for i in range(CELL_TOTAL):
-                    cx = CELL_START_X + i * CELL_W
-                    cy = GATE_Y + gate.h + 10
-                    # 点击格子区域
-                    if cx <= mx <= cx + CELL_W and cy <= my <= cy + 50:
-                        # 只能在可建造格子建造
-                        if i in buildable_cell and build_mode and not cell_occupied[i]:
-                            cost = BUILD_COST[build_mode]
-                            if player.gold >= cost:
-                                player.gold -= cost
-                                tx = cx + CELL_W // 2
-                                ty = cy + 25
-                                # 创建炮塔，传入格子索引
-                                t = factory.create_tower(build_mode, tx, ty, i)
-                                t.total_cost = cost
+                # 建造面板
+                if show_tower_buy:
+                    for idx, opt in enumerate(TOWER_SELECT_DATA):
+                        row = idx // 2
+                        col = idx % 2
+                        ix = SCREEN_W // 2 - 50 + col * (TOWER_UI_ICON_SIZE + 10)
+                        iy = GATE_Y - 80 + row * (TOWER_UI_ICON_SIZE + 10)
+                        br = pygame.Rect(ix, iy, TOWER_UI_ICON_SIZE, TOWER_UI_ICON_SIZE)
+                        if br.collidepoint(mx, my):
+                            if player.gold >= opt["cost"]:
+                                player.gold -= opt["cost"]
+                                cx = CELL_START_X + selected_cell * int(CELL_RAW_W)
+                                tx = cx + CELL_FINAL_W // 2
+                                ty = GATE_Y + gate.h + CELL_H // 2
+                                t = factory.create_tower(opt["type"], tx, ty, selected_cell)
+                                t.total_cost = opt["cost"]
+                                t.level = 1
                                 towers.append(t)
-                                cell_occupied[i] = True
-                                build_mode = None
-                        # 点击已有炮塔 → 选中
+                                cell_occupied[selected_cell] = True
+                            else:
+                                tip_text = "金币不足！"
+                                tip_time = now + 1500
+                            show_tower_buy = False
+                            selected_cell = -1
+                            hit = True
+                            break
+                    if not hit:
+                        show_tower_buy = False
+                        selected_cell = -1
+
+                # 炮塔菜单
+                elif show_tower_menu and selected_tower:
+                    btn_w = TOWER_UI_BTN_SIZE
+                    space = TOWER_UI_SPACING
+                    total_w = btn_w * 3 + space * 2
+                    sx = selected_tower.x - total_w // 2
+                    sy = selected_tower.y - 80
+
+                    r1 = pygame.Rect(sx, sy, btn_w, btn_w)
+                    r2 = pygame.Rect(sx + btn_w + space, sy, btn_w, btn_w)
+                    r3 = pygame.Rect(sx + (btn_w + space) * 2, sy, btn_w, btn_w)
+
+                    if r1.collidepoint(mx, my):
+                        cost = selected_tower.upgrade_cost()
+                        if selected_tower.level < MAX_TOWER_LEVEL and player.gold >= cost:
+                            player.gold -= cost
+                            selected_tower.level += 1
+                            selected_tower.upgrade_stat()
+                        hit = True
+                    elif r2.collidepoint(mx, my):
+                        player.gold += int(selected_tower.total_cost * SELL_RETURN_RATIO)
+                        cell_occupied[selected_tower.cell_idx] = False
+                        towers.remove(selected_tower)
+                        hit = True
+                    elif r3.collidepoint(mx, my):
+                        hit = True
+
+                    show_tower_menu = False
+                    selected_tower = None
+
+                # 枪升级面板
+                elif show_gun_menu:
+                    cx = CELL_START_X + MIDDLE_CELL_INDEX * int(CELL_RAW_W)
+                    cy = GATE_Y + gate.h + 10
+                    btn_w = 80
+                    spacing = 10
+                    cost = gun.upgrade_cost()
+                    can_up = gun.level < MAX_GUN_LEVEL and player.gold >= cost
+                    is_critical = gun.level in GUN_CRITICAL_LEVELS
+
+                    if is_critical:
+                        r1 = pygame.Rect(cx - 90, cy - 120, btn_w, 40)
+                        r2 = pygame.Rect(cx, cy - 120, btn_w, 40)
+                        r3 = pygame.Rect(cx + 90, cy - 120, btn_w, 40)
+                        if r1.collidepoint(mx, my) and can_up:
+                            player.gold -= cost
+                            gun.add_ballistic()
+                            hit = True
+                        elif r2.collidepoint(mx, my) and can_up:
+                            player.gold -= cost
+                            gun.add_burst()
+                            hit = True
+                        elif r3.collidepoint(mx, my):
+                            hit = True
+                    else:
+                        r1 = pygame.Rect(cx - 45, cy - 120, btn_w, 40)
+                        r2 = pygame.Rect(cx + 45, cy - 120, btn_w, 40)
+                        if r1.collidepoint(mx, my) and can_up:
+                            player.gold -= cost
+                            gun.normal_upgrade()
+                            hit = True
+                        elif r2.collidepoint(mx, my):
+                            hit = True
+                    show_gun_menu = False
+
+                # 普通点击
+                else:
+                    for i in range(CELL_TOTAL):
+                        if cell_rects[i].collidepoint(mx, my):
+                            if i == MIDDLE_CELL_INDEX:
+                                show_gun_menu = True
+                                hit = True
+                            elif i in buildable_cells and not cell_occupied[i]:
+                                show_tower_buy = True
+                                selected_cell = i
+                                hit = True
+                            break
+                    if not hit:
                         for t in towers:
-                            if abs(mx - t.x) < t.size and abs(my - t.y) < t.size:
+                            if abs(mx - t.x) < 40 and abs(my - t.y) < 40:
                                 selected_tower = t
+                                show_tower_menu = True
+                                hit = True
                                 break
 
-        # -------------------------- 玩家枪支自动射击（智能寻敌） --------------------------
+        # 绘制建造面板
+        if show_tower_buy:
+            pw = 110
+            ph = 100
+            px = SCREEN_W // 2 - pw // 2
+            py = GATE_Y - 100
+            pygame.draw.rect(screen, (50, 50, 50), (px, py, pw, ph))
+            pygame.draw.rect(screen, COLOR_WHITE, (px, py, pw, ph), 2)
+            for idx, opt in enumerate(TOWER_SELECT_DATA):
+                row = idx // 2
+                col = idx % 2
+                ix = px + 10 + col * (TOWER_UI_ICON_SIZE + 10)
+                iy = py + 10 + row * (TOWER_UI_ICON_SIZE + 10)
+                pygame.draw.rect(screen, opt["color"], (ix, iy, TOWER_UI_ICON_SIZE, TOWER_UI_ICON_SIZE))
+                screen.blit(get_font(12).render(str(opt["cost"]), True, COLOR_WHITE),
+                            (ix + 5, iy + TOWER_UI_ICON_SIZE - 16))
+
+        # 绘制炮塔3按钮菜单
+        if show_tower_menu and selected_tower:
+            btn_w = TOWER_UI_BTN_SIZE
+            space = TOWER_UI_SPACING
+            cost = selected_tower.upgrade_cost()
+            can_up = selected_tower.level < MAX_TOWER_LEVEL and player.gold >= cost
+            total_w = btn_w * 3 + space * 2
+            sx = selected_tower.x - total_w // 2
+            sy = selected_tower.y - 80
+
+            r1 = (sx, sy, btn_w, btn_w)
+            pygame.draw.rect(screen, (70, 70, 70), r1)
+            if can_up:
+                if btn_upgrade:
+                    screen.blit(btn_upgrade, r1)
+                else:
+                    pygame.draw.rect(screen, COLOR_GREEN, (sx + 15, sy + 10, 10, 20))
+            txt = f"{cost}" if selected_tower.level < MAX_TOWER_LEVEL else "MAX"
+            screen.blit(get_font(12).render(txt, True, COLOR_WHITE if can_up else (160, 160, 160)),
+                        (sx + 8, sy + btn_w - 16))
+
+            r2 = (sx + btn_w + space, sy, btn_w, btn_w)
+            pygame.draw.rect(screen, (70, 70, 70), r2)
+            if btn_sell: screen.blit(btn_sell, r2)
+
+            r3 = (sx + (btn_w + space) * 2, sy, btn_w, btn_w)
+            pygame.draw.rect(screen, (70, 70, 70), r3)
+            if btn_cancel: screen.blit(btn_cancel, r3)
+
+        # 绘制枪升级面板
+        if show_gun_menu:
+            cx = CELL_START_X + MIDDLE_CELL_INDEX * int(CELL_RAW_W)
+            cy = GATE_Y + gate.h + 10
+            cost = gun.upgrade_cost()
+            can_up = gun.level < MAX_GUN_LEVEL and player.gold >= cost
+            is_critical = gun.level in GUN_CRITICAL_LEVELS
+            font = get_font(14)
+
+            if is_critical:
+                r1 = pygame.Rect(cx - 90, cy - 120, 80, 40)
+                r2 = pygame.Rect(cx, cy - 120, 80, 40)
+                r3 = pygame.Rect(cx + 90, cy - 120, 80, 40)
+                pygame.draw.rect(screen, (60, 60, 60), r1)
+                pygame.draw.rect(screen, (60, 60, 60), r2)
+                pygame.draw.rect(screen, (60, 60, 60), r3)
+                screen.blit(font.render("弹道+1", True, COLOR_WHITE if can_up else (120, 120, 120)),
+                            (r1.x + 15, r1.y + 10))
+                screen.blit(font.render("连发+1", True, COLOR_WHITE if can_up else (120, 120, 120)),
+                            (r2.x + 15, r2.y + 10))
+                screen.blit(font.render("退出", True, COLOR_WHITE), (r3.x + 25, r3.y + 10))
+            else:
+                r1 = pygame.Rect(cx - 45, cy - 120, 80, 40)
+                r2 = pygame.Rect(cx + 45, cy - 120, 80, 40)
+                pygame.draw.rect(screen, (60, 60, 60), r1)
+                pygame.draw.rect(screen, (60, 60, 60), r2)
+                screen.blit(font.render(f"升级{cost}", True, COLOR_WHITE if can_up else (120, 120, 120)),
+                            (r1.x + 10, r1.y + 10))
+                screen.blit(font.render("退出", True, COLOR_WHITE), (r2.x + 25, r2.y + 10))
+
+        # 玩家射击
         gun.shoot(player.x, player.y, monsters, GATE_Y)
 
-        # -------------------------- 定时刷怪 --------------------------
-        if now - spawn_timer > 1500:
+        # 刷怪
+        if now - spawn_timer > MONSTER_SPAWN_INTERVAL:
             spawn_timer = now
             monsters.append(factory.create_monster(wave))
 
-        # -------------------------- 怪物更新：移动+撞击大门+死亡 --------------------------
+        # 怪物逻辑
         for m in monsters[:]:
             m.update()
-            # 先标记是否需要删除
-            need_remove = False
-
-            # 怪物撞击大门
+            rm = False
             if m.y + m.size > gate.y and m.y < gate.y + gate.h:
-                gate.hp -= m.damage
-                damage_texts.append(DamageText(gate.x, gate.y - 20, m.damage, "physical", False))
-                if gate_hit_snd:
-                    gate_hit_snd.play()
-                need_remove = True
-
-            # 怪物死亡，获得金币
-            if m.hp <= 0 and not need_remove:
-                player.gold += 10
-                need_remove = True
-
-            # 统一删除，避免重复移除报错
-            if need_remove and m in monsters:
+                gate.hp -= MONSTER_DAMAGE_TO_GATE
+                damage_texts.append(DamageText(gate.x, gate.y - 20, MONSTER_DAMAGE_TO_GATE, "physical"))
+                rm = True
+            if m.hp <= 0 and not rm:
+                player.gold += MONSTER_KILL_REWARD
+                rm = True
+            if rm and m in monsters:
                 monsters.remove(m)
 
-        # -------------------------- 炮塔射击 + 子弹位移 --------------------------
+        # 炮塔射击
         for t in towers:
             t.shoot(monsters, GATE_Y)
             for b in t.bullets:
-                b["rect"].x += b["dir"][0] * b["speed"]
-                b["rect"].y += b["dir"][1] * b["speed"]
+                b["rect"].x += b["dir"][0] * BULLET_SPEED_TOWER
+                b["rect"].y += b["dir"][1] * BULLET_SPEED_TOWER
 
-        # 玩家子弹位移
+        # 玩家子弹移动
         for b in gun.bullets:
             b["rect"].x += b["dir"][0] * b["speed"]
             b["rect"].y += b["dir"][1] * b["speed"]
 
-        # -------------------------- 子弹碰撞检测（精准，无持续伤害） --------------------------
+        # 子弹碰撞 + 抗性伤害计算
         all_bullets = gun.bullets + [b for t in towers for b in t.bullets]
-        bullets_to_remove = []
-        for bullet in all_bullets:
-            # 子弹飞出屏幕，标记删除
-            if bullet["rect"].top > H or bullet["rect"].bottom < 0 or bullet["rect"].left < 0 or bullet[
-                "rect"].right > W:
-                bullets_to_remove.append(bullet)
+        rem = []
+        for b in all_bullets:
+            if b["rect"].left < 0 or b["rect"].right > SCREEN_W or b["rect"].top < 0 or b["rect"].bottom > SCREEN_H:
+                rem.append(b)
                 continue
-
-            hit = False
             for m in monsters:
-                mr = pygame.Rect(m.x, m.y, m.size, m.size)
-                if bullet["rect"].colliderect(mr):
-                    # 计算伤害+暴击
-                    dmg = bullet["dmg"]
-                    crit = random.random() < 0.1
-                    if crit:
-                        dmg = int(dmg * 1.5)
-
-                    m.hp -= dmg
-                    # 生成伤害飘字
-                    damage_texts.append(DamageText(m.x + m.size // 2, m.y, dmg, bullet["dmg_type"], crit))
-
-                    # 玩家子弹播放命中音效，炮塔子弹不播放
-                    if not bullet.get("from_tower") and bullet_hit_snd:
-                        bullet_hit_snd.play()
-
-                    bullets_to_remove.append(bullet)
-                    hit = True
+                mr = pygame.Rect(m.x - m.size // 2, m.y - m.size // 2, m.size, m.size)
+                if b["rect"].colliderect(mr):
+                    dt = b["dmg_type"]
+                    val = b["dmg"]
+                    p = f = e = i = 0
+                    if dt == "physical": p = val
+                    if dt == "fire": f = val
+                    if dt == "ice": i = val
+                    if dt == "electric": e = val
+                    real = (1 - m.phys_resist) * p + (1 - m.fire_resist) * f + (1 - m.ice_resist) * i + (
+                                1 - m.elec_resist) * e
+                    m.hp -= real
+                    damage_texts.append(DamageText(m.x, m.y - 20, int(real), dt))
+                    rem.append(b)
                     break
-            if hit:
-                continue
 
-        # 统一删除子弹
-        for b in bullets_to_remove:
-            if b in gun.bullets:
-                gun.bullets.remove(b)
+        # 清除子弹
+        for b in rem:
+            if b in gun.bullets: gun.bullets.remove(b)
             for t in towers:
-                if b in t.bullets:
-                    t.bullets.remove(b)
+                if b in t.bullets: t.bullets.remove(b)
 
-        # -------------------------- 更新并绘制伤害飘字 --------------------------
+        # 伤害数字
         for dt in damage_texts[:]:
             dt.update()
             dt.draw(screen)
-            if dt.life <= 0:
-                damage_texts.remove(dt)
+            if dt.life <= 0: damage_texts.remove(dt)
 
-        # -------------------------- 绘制所有游戏元素 --------------------------
+        # 绘制场景
         gate.draw(screen)
         player.draw(screen)
-        # 绘制枪支
-        if gun.img:
-            screen.blit(gun.img, (player.x - 15, player.y - 40))
+        if gun.img: screen.blit(gun.img, (player.x - 15, player.y - 40))
 
-        # 绘制炮塔，选中的炮塔加黄色外框
+        # 绘制炮塔
         for t in towers:
             t.draw(screen)
-            if selected_tower is t:
-                pygame.draw.circle(screen, YELLOW, (t.x, t.y), t.size // 2 + 5, 2)
+            screen.blit(get_font(18).render(str(t.level), True, COLOR_YELLOW), (t.x - 25, t.y - 25))
+            cost = t.upgrade_cost()
+            if t.level < MAX_TOWER_LEVEL and player.gold >= cost:
+                screen.blit(get_font(20).render("↑", True, COLOR_GREEN), (t.x + 15, t.y - 25))
 
-        # 绘制怪物
+        # 怪物 & 子弹 + 怪物血条
         for m in monsters:
             m.draw(screen)
+            bar_w = m.size
+            bar_h = 4
+            ratio = m.hp / m.max_hp
+            pygame.draw.rect(screen, COLOR_RED, (m.x - bar_w // 2, m.y - m.size // 2 - 8, bar_w, bar_h))
+            pygame.draw.rect(screen, COLOR_GREEN, (m.x - bar_w // 2, m.y - m.size // 2 - 8, bar_w * ratio, bar_h))
 
-        # 绘制子弹
-        for b in gun.bullets + [b for t in towers for b in t.bullets]:
+        for b in all_bullets:
             if bullet_img:
                 screen.blit(bullet_img, b["rect"])
             else:
-                c = YELLOW if b["laser"] else WHITE
-                pygame.draw.circle(screen, c, b["rect"].center, 5)
+                pygame.draw.circle(screen, COLOR_YELLOW if b.get("laser") else COLOR_WHITE, b["rect"].center, 5)
 
-        # 绘制技能范围与CD
-        fire.draw(screen, W // 2, H // 2)
-        thunder.draw(screen, W // 2, H // 2)
-        ice.draw(screen, W // 2, H // 2)
+        # 技能范围
+        fire_skill.draw(screen, SCREEN_W // 2, SCREEN_H // 2)
+        thunder_skill.draw(screen, SCREEN_W // 2, SCREEN_H // 2)
+        ice_skill.draw(screen, SCREEN_W // 2, SCREEN_H // 2)
 
-        # -------------------------- UI文字信息 --------------------------
-        font = get_font(20)
-        screen.blit(font.render(f"金币:{player.gold}", True, WHITE), (10, 10))
-        screen.blit(font.render(f"大门HP:{gate.hp}", True, WHITE), (10, 30))
-        screen.blit(font.render(f"波次:{wave}", True, WHITE), (10, 50))
-        screen.blit(font.render("1普通塔40  2冰塔80  3火塔100  |  选中塔: U升级  D摧毁", True, YELLOW), (10, 740))
-        screen.blit(font.render("空格=火焰  T=雷电  C=冰  0取消建造", True, ORANGE), (10, 765))
+        # UI文字
+        f = get_font(20)
+        screen.blit(f.render(f"金币:{player.gold}", True, COLOR_WHITE), (10, 10))
+        screen.blit(f.render(f"大门HP:{gate.hp}", True, COLOR_WHITE), (10, 30))
+        screen.blit(f.render(f"波次:{wave}", True, COLOR_WHITE), (10, 50))
+        screen.blit(f.render("左键：建造/升级/出售 空白关闭", True, COLOR_YELLOW), (10, 740))
+
+        # 提示文本
+        if now < tip_time:
+            screen.blit(get_font(26).render(tip_text, True, COLOR_RED), (SCREEN_W // 2 - 70, SCREEN_H // 2))
 
         # 游戏结束
         if gate.hp <= 0:
-            bf = get_font(60)
-            screen.blit(bf.render("游戏结束", True, RED), (W // 2 - 80, H // 2))
+            screen.blit(get_font(60).render("游戏结束", True, COLOR_RED), (SCREEN_W // 2 - 100, SCREEN_H // 2))
 
         pygame.display.flip()
 
